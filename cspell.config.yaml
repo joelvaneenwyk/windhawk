@@ -1,0 +1,11 @@
+version: "0.2"
+ignorePaths: []
+dictionaryDefinitions:
+  - name: windhawk
+    path: .github/config/windhawk.dict
+    addWords: true
+dictionaries:
+  - windhawk
+words: []
+ignoreWords: []
+import: []
