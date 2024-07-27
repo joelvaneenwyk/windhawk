@@ -768,6 +768,7 @@
 		"vscode-nls-i18n": "^0.2.4"
 	},
 	"devDependencies": {
+		"@electron/rebuild": "^3.3.0",
 		"@types/fs-ext": "^2.0.1",
 		"@types/js-yaml": "^4.0.6",
 		"@types/node": "^20.6.3",
@@ -777,7 +778,6 @@
 		"@typescript-eslint/eslint-plugin": "^6.7.2",
 		"@typescript-eslint/parser": "^6.7.2",
 		"copy-webpack-plugin": "^11.0.0",
-		"@electron/rebuild": "^3.3.0",
 		"eslint": "^8.49.0",
 		"node-loader": "^2.0.0",
 		"rimraf": "^5.0.1",
