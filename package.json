@@ -7,11 +7,17 @@
     "src/vscode-windhawk"
   ],
   "scripts": {
-    "build": "yarn workspaces foreach --all run build"
+    "build": "yarn workspaces foreach --all run build",
+    "start": "yarn workspace vscode-windhawk-ui-nx start",
+    "watch": "yarn workspace vscode-windhawk-ui-nx watch",
+    "build-ext": "yarn workspace vscode-windhawk-ui-nx build-ext",
+    "test": "yarn workspace vscode-windhawk-ui-nx test",
+    "build-css": "yarn workspace vscode-windhawk-ui-nx build-css",
+    "watch-css": "yarn workspace vscode-windhawk-ui-nx watch-css/"
   },
   "dependencies": {
-    "nx": "^19.5.3",
-    "vscode-windhawk-ui-nx": "*",
-    "windhawk": "*"
+    "nx": "^20",
+    "vscode-windhawk-ui-nx": "workspace:^",
+    "windhawk": "workspace:^"
   }
 }
