@@ -1,10 +1,11 @@
 #include "stdafx.h"
 
+#include "functions.h "
 #include "storage_manager.h"
 
 namespace {
 
-std::filesystem::path pathFromStorage(
+std::filesystem::path PathFromStorage(
     const PortableSettings& storage,
     PCWSTR valueName,
     const std::filesystem::path& baseFolderPath) {
@@ -12,6 +13,17 @@ std::filesystem::path pathFromStorage(
     if (storedPath.empty()) {
         throw std::runtime_error("Missing path value: " + CStringA(valueName));
     }
+
+#ifndef _WIN64
+    SYSTEM_INFO siSystemInfo;
+    GetNativeSystemInfo(&siSystemInfo);
+    if (siSystemInfo.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_INTEL) {
+        // Get the native Program Files path regardless of the current
+        // process architecture.
+        storedPath = Functions::ReplaceAll(storedPath, L"%ProgramFiles%",
+                                           L"%ProgramW6432%");
+    }
+#endif  // _WIN64
 
     auto expandedPath =
         wil::ExpandEnvironmentStrings<std::wstring>(storedPath.c_str());
@@ -105,10 +117,10 @@ StorageManager::StorageManager() {
 
     auto storage = IniFileSettings(iniFilePath.c_str(), L"Storage", false);
 
-    enginePath = pathFromStorage(storage, L"EnginePath", folderPath);
-    uiPath = pathFromStorage(storage, L"UIPath", folderPath);
-    compilerPath = pathFromStorage(storage, L"CompilerPath", folderPath);
-    appDataPath = pathFromStorage(storage, L"AppDataPath", folderPath);
+    enginePath = PathFromStorage(storage, L"EnginePath", folderPath);
+    uiPath = PathFromStorage(storage, L"UIPath", folderPath);
+    compilerPath = PathFromStorage(storage, L"CompilerPath", folderPath);
+    appDataPath = PathFromStorage(storage, L"AppDataPath", folderPath);
 
     if (!std::filesystem::is_directory(appDataPath)) {
         std::error_code ec;
@@ -126,7 +138,7 @@ StorageManager::StorageManager() {
         }
 
         auto firstBackslash = registryKey.find(L'\\');
-        if (firstBackslash == std::wstring::npos) {
+        if (firstBackslash == registryKey.npos) {
             throw std::runtime_error("Invalid RegistryKey value");
         }
 

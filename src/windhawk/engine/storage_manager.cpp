@@ -1,5 +1,6 @@
 #include "stdafx.h"
 
+#include "functions.h"
 #include "storage_manager.h"
 #include "var_init_once.h"
 
@@ -7,7 +8,7 @@ extern HINSTANCE g_hDllInst;
 
 namespace {
 
-std::filesystem::path pathFromStorage(
+std::filesystem::path PathFromStorage(
     const PortableSettings& storage,
     PCWSTR valueName,
     const std::filesystem::path& baseFolderPath) {
@@ -15,6 +16,17 @@ std::filesystem::path pathFromStorage(
     if (storedPath.empty()) {
         throw std::runtime_error("Missing path value");
     }
+
+#ifndef _WIN64
+    SYSTEM_INFO siSystemInfo;
+    GetNativeSystemInfo(&siSystemInfo);
+    if (siSystemInfo.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_INTEL) {
+        // Get the native Program Files path regardless of the current process
+        // architecture.
+        storedPath = Functions::ReplaceAll(storedPath, L"%ProgramFiles%",
+                                           L"%ProgramW6432%");
+    }
+#endif  // _WIN64
 
     auto expandedPath =
         wil::ExpandEnvironmentStrings<std::wstring>(storedPath.c_str());
@@ -28,21 +40,8 @@ std::filesystem::path pathFromStorage(
         HRESULT hr = SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr,
                                           &programData);
         if (SUCCEEDED(hr)) {
-            size_t programDataLength = wcslen(programData.get());
-
-            PCWSTR envVar = L"%ProgramData%";
-            size_t envVarLength = ARRAYSIZE(L"%ProgramData%") - 1;
-
-            for (size_t i = 0; i < expandedPath.length() - envVarLength + 1;) {
-                if (_wcsnicmp(expandedPath.c_str() + i, envVar, envVarLength) ==
-                    0) {
-                    expandedPath.replace(i, envVarLength, programData.get(),
-                                         programDataLength);
-                    i += programDataLength;
-                } else {
-                    i++;
-                }
-            }
+            expandedPath = Functions::ReplaceAll(expandedPath, L"%ProgramData%",
+                                                 programData.get());
         }
     }
 
@@ -158,15 +157,6 @@ wil::unique_hfile StorageManager::CreateModMetadataFile(PCWSTR metadataCategory,
 
 void StorageManager::SetModMetadataValue(wil::unique_hfile& file,
                                          PCWSTR value) {
-    OVERLAPPED overlapped = {0};
-    THROW_IF_WIN32_BOOL_FALSE(LockFileEx(file.get(), LOCKFILE_EXCLUSIVE_LOCK, 0,
-                                         DWORD_MAX, DWORD_MAX, &overlapped));
-
-    auto unlockWhenDone = wil::scope_exit([&file] {
-        OVERLAPPED overlapped = {0};
-        UnlockFileEx(file.get(), 0, DWORD_MAX, DWORD_MAX, &overlapped);
-    });
-
     THROW_LAST_ERROR_IF(SetFilePointer(file.get(), 0, nullptr, FILE_BEGIN) ==
                         INVALID_SET_FILE_POINTER);
     THROW_IF_WIN32_BOOL_FALSE(SetEndOfFile(file.get()));
@@ -246,28 +236,19 @@ std::filesystem::path StorageManager::GetSymbolsPath() {
 }
 
 StorageManager::StorageManager() {
-    std::filesystem::path iterPath =
+    std::filesystem::path dllPath =
         wil::GetModuleFileName<std::wstring>(g_hDllInst);
 
-    std::filesystem::path iniFilePath;
-    bool found = false;
+    std::filesystem::path iniFileFolder = dllPath.parent_path().parent_path();
+    std::filesystem::path iniFilePath = iniFileFolder / L"engine.ini";
 
-    while (!found && iterPath.has_relative_path()) {
-        iterPath = iterPath.parent_path();
-
-        iniFilePath = iterPath / L"engine.ini";
-        found = std::filesystem::is_regular_file(iniFilePath);
-    }
-
-    if (!found) {
+    if (!std::filesystem::is_regular_file(iniFilePath)) {
         throw std::runtime_error("engine.ini not found");
     }
 
-    std::filesystem::path iniFileFolder = std::move(iterPath);
-
     auto storage = IniFileSettings(iniFilePath.c_str(), L"Storage", false);
 
-    appDataPath = pathFromStorage(storage, L"AppDataPath", iniFileFolder);
+    appDataPath = PathFromStorage(storage, L"AppDataPath", iniFileFolder);
 
     if (!std::filesystem::is_directory(appDataPath)) {
         std::error_code ec;
@@ -285,7 +266,7 @@ StorageManager::StorageManager() {
         }
 
         auto firstBackslash = registryKey.find(L'\\');
-        if (firstBackslash == std::wstring::npos) {
+        if (firstBackslash == registryKey.npos) {
             throw std::runtime_error("Invalid RegistryKey value");
         }
 
@@ -409,13 +390,19 @@ StorageManager::ModConfigChangeNotification::ModConfigChangeNotification() {
             CreateEvent(nullptr, FALSE, FALSE, nullptr));
         THROW_LAST_ERROR_IF_NULL(changeHandle);
 
+        DWORD regNotifyChangeKeyValueFlags =
+            REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET;
+        if (Functions::IsWindowsVersionOrGreaterWithBuildNumber(6, 2, 0)) {
+            regNotifyChangeKeyValueFlags |= REG_NOTIFY_THREAD_AGNOSTIC;
+        }
+
         THROW_IF_WIN32_ERROR(RegNotifyChangeKeyValue(
-            key.get(), TRUE,
-            REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-            changeHandle.get(), TRUE));
+            key.get(), TRUE, regNotifyChangeKeyValueFlags, changeHandle.get(),
+            TRUE));
 
         monitoringState =
-            RegistryState{std::move(key), std::move(changeHandle)};
+            RegistryState{std::move(key), regNotifyChangeKeyValueFlags,
+                          std::move(changeHandle)};
     }
 }
 
@@ -438,8 +425,19 @@ void StorageManager::ModConfigChangeNotification::ContinueMonitoring() {
     } else {
         auto& regState = std::get<RegistryState>(monitoringState);
         THROW_IF_WIN32_ERROR(RegNotifyChangeKeyValue(
-            regState.key.get(), TRUE,
-            REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
+            regState.key.get(), TRUE, regState.regNotifyChangeKeyValueFlags,
             regState.eventHandle.get(), TRUE));
+    }
+}
+
+bool StorageManager::ModConfigChangeNotification::CanMonitorAcrossThreads() {
+    auto& storageManager = GetInstance();
+
+    if (storageManager.portableStorage) {
+        return true;
+    } else {
+        auto& regState = std::get<RegistryState>(monitoringState);
+        return regState.regNotifyChangeKeyValueFlags &
+               REG_NOTIFY_THREAD_AGNOSTIC;
     }
 }
