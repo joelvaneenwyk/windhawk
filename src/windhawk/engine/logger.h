@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "logger_base.h"
 
 class Logger : public LoggerBase {
