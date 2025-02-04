@@ -764,7 +764,7 @@
 		"jsonschema": "^1.4.1",
 		"native-reg": "^1.1.1",
 		"node-fetch": "^2.6.13",
-		"semver": "^7.5.4",
+		"semver": "^7.7.0",
 		"vscode-nls-i18n": "^0.2.4"
 	},
 	"devDependencies": {
@@ -783,7 +783,7 @@
 		"rimraf": "^5.0.1",
 		"ts-loader": "^9.4.4",
 		"typescript": "^5.2.2",
-		"webpack": "^5.88.2",
+		"webpack": "^5.94.0",
 		"webpack-cli": "^5.1.4"
 	}
 }
