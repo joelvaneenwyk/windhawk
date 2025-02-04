@@ -1,17 +1,22 @@
 @ECHO OFF
+SETLOCAL ENABLEEXTENSIONS
 
-REM // Usage:
-REM // build.bat Debug ""
-REM // build.bat Release :rebuild
+:: Usage:
+:: build.bat Debug ""
+:: build.bat Release :rebuild
 
 SET "VSCMD_START_DIR=%CD%"
-IF "%FrameworkVersion%" == "" CALL "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+IF "%FrameworkVersion%" == "" CALL "%ProgramFiles%\Microsoft Visual Studio\2022\Preview\VC\Auxiliary\Build\vcvars64.bat"
 
-MSBuild.exe "windhawk.sln" /m /t:"app%~2" /p:Configuration="%~1" /p:Platform="Win32" || GOTO fail
-MSBuild.exe "windhawk.sln" /m /t:"engine%~2" /p:Configuration="%~1" /p:Platform="Win32" || GOTO fail
-MSBuild.exe "windhawk.sln" /m /t:"engine%~2" /p:Configuration="%~1" /p:Platform="x64" || GOTO fail
+SET "POSTFIX=%~2"
+SET "CONFIG=%~1"
+IF "%CONFIG%" == "" SET "CONFIG=Debug"
 
-REM // Done
+MSBuild.exe "%~dp0windhawk.sln" /m /t:"app%POSTFIX%" /p:Configuration="%CONFIG%" /p:Platform="Win32" || GOTO fail
+MSBuild.exe "%~dp0windhawk.sln" /m /t:"engine%POSTFIX%" /p:Configuration="%CONFIG%" /p:Platform="Win32" || GOTO fail
+MSBuild.exe "%~dp0windhawk.sln" /m /t:"engine%POSTFIX%" /p:Configuration="%CONFIG%" /p:Platform="x64" || GOTO fail
+
+:: Done
 EXIT /b 0
 
 :fail
