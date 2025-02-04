@@ -265,3 +265,5 @@ __pycache__/
 .pnp.*
 node_modules/
 .vs/
+
+packages/
